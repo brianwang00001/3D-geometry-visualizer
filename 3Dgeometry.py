@@ -3,18 +3,26 @@ import matplotlib.pyplot as plt
 import plotly.graph_objects as go
 
 # rotation matrix
-Rx = lambda theta: np.array([[1, 0, 0],
-                             [0, np.cos(theta), -np.sin(theta)],
-                             [0, np.sin(theta), np.cos(theta)]])
-Ry = lambda theta: np.array([[np.cos(theta), 0, np.sin(theta)],
-                             [0, 1, 0],
-                             [-np.sin(theta), 0, np.cos(theta)]])
-Rz = lambda theta: np.array([[np.cos(theta), -np.sin(theta), 0], 
-                             [np.sin(theta), np.cos(theta), 0], 
-                             [0, 0, 1]])
+Rx = lambda theta: np.array([
+    [1, 0, 0],
+    [0, np.cos(theta), -np.sin(theta)],
+    [0, np.sin(theta), np.cos(theta)]])
+Ry = lambda theta: np.array([
+    [np.cos(theta), 0, np.sin(theta)],
+    [0, 1, 0],
+    [-np.sin(theta), 0, np.cos(theta)]])
+Rz = lambda theta: np.array([
+    [np.cos(theta), -np.sin(theta), 0], 
+    [np.sin(theta), np.cos(theta), 0],
+    [0, 0, 1]])
 
-# return data of an arrow object
-class Arrow():
+# skew symmetric matrix for cross product
+skew = lambda v: np.array([
+    [0, -v[2], v[1]],
+    [v[2], 0, -v[0]],
+    [-v[1], v[0], 0]])    
+
+class Arrow:
 
     def __init__(self, start, end, color='black', name=None):
         start = start.flatten()
@@ -50,15 +58,13 @@ class Arrow():
     def get_fig_data(self):
         return self.fig_data
 
-# return data of a frame object
-class Frame():
+class Frame:
     
     def __init__(self, pose=np.eye(3), center=np.zeros(3), color='black'):
         # original center and pose 
         x_axis = np.array([1, 0, 0])
         y_axis = np.array([0, 1, 0])
         z_axis = np.array([0, 0, 1])
-        o = np.zeros(3)
 
         # transformed center and pose  
         x_axis = pose @ x_axis
@@ -75,21 +81,57 @@ class Frame():
     def get_fig_data(self):
         return self.fig_data
 
-class Line():
+# Line segment
+class Segment:
 
     def __init__(self, start, end, color='black', opacity=1):
-        fig_data = go.Scatter3d(
-            x = [start[0], end[0]], 
-            y = [start[1], end[1]], 
-            z = [start[2], end[2]], 
-            mode = "lines", line = dict(color=color), opacity=opacity, showlegend = False)
-        self.fig_data = [fig_data]
+        start, end = self.input_broadcast(start, end)
+        fig_data = []
+        for _start, _end in zip(start, end):
+            fig_data.append(go.Scatter3d(
+                x = [_start[0], _end[0]], 
+                y = [_start[1], _end[1]], 
+                z = [_start[2], _end[2]], 
+                mode = "lines", line = dict(color=color), opacity=opacity, showlegend = False))
+        self.fig_data = fig_data
+
+    # ===== to allow 1-to-1, 1-to-N, N-to-1, N-to-M inputs =====
+    # case 1: a: (3, ), b: (3, ) ->  (1, 3), b: (1, 3)
+    # case 2: a: (N, 3), b: (3, ) -> (N, 3), b: (N, 3)
+    # case 3: a: (3, ), b: (N, 3) -> (N, 3), b: (N, 3)
+    # case 4: a: (N, 3), b: (M, 3) -> (N*M, 3), b: (N*M, 3)
+    def input_broadcast(self, a, b):
+        a, b, = a.reshape(-1, 3), b.reshape(-1, 3)
+        Na, Nb = a.shape[0], b.shape[0]
+        new_a = np.repeat(a, Nb, axis=0)
+        new_b = np.repeat(b, Na, axis=0)
+        new_b = new_b.reshape(Nb, Na, 3).transpose(1, 0, 2).reshape(-1, 3)
+        return new_a, new_b
 
     def get_fig_data(self):
         return self.fig_data
+    
+# plot "infinitely" lone line
+class Line(Segment):
+
+    def __init__(self, start, end, color='black', opacity=1):
+        start, end = super().input_broadcast(start, end)
+        
+        a_big_num = 20
+        length = np.linalg.norm(start - end, axis=-1) + 1e-15
+        coef = a_big_num / length
+        coef = coef.reshape(-1, 1)
+        start2end = end - start 
+        # basically extend the line segment to "infinitely" long
+        start = start - coef * start2end
+        end = end + coef * start2end
+        super().__init__(start, end, color, opacity)
+
+    def get_fig_data(self):
+        return super().get_fig_data()
 
 # include image plane and the 4 lines from focal point to the 4 corners of the image plane
-class ImagePlane():
+class ImagePlane:
 
     def __init__(self, pose, center, focal_len, img_width, img_height, color='black'):
         x_axis = np.array([1, 0, 0])
@@ -114,10 +156,10 @@ class ImagePlane():
                         j=[1, 2],  # vertices of second triangle
                         k=[2, 3],  # vertices of third triangle
                         opacity=opcty, color=color)]
-        data.extend(Line(o, corner1, color=color, opacity=opcty).get_fig_data())
-        data.extend(Line(o, corner2, color=color, opacity=opcty).get_fig_data())
-        data.extend(Line(o, corner3, color=color, opacity=opcty).get_fig_data())
-        data.extend(Line(o, corner4, color=color, opacity=opcty).get_fig_data())
+        data.extend(Segment(o, corner1, color=color, opacity=opcty).get_fig_data())
+        data.extend(Segment(o, corner2, color=color, opacity=opcty).get_fig_data())
+        data.extend(Segment(o, corner3, color=color, opacity=opcty).get_fig_data())
+        data.extend(Segment(o, corner4, color=color, opacity=opcty).get_fig_data())
 
         self.fig_data = data
 
@@ -126,9 +168,16 @@ class ImagePlane():
 
 drange = 4 # set the plot size
 graph_center = np.array([2, 0, 1])
-def plot_all(figs, world=False, pltrange=[[-drange+graph_center[0], drange+graph_center[0]], 
-                                           [-drange+graph_center[1], drange+graph_center[1]],
-                                           [-drange+graph_center[2], drange+graph_center[2]]]):
+def plot_all(
+    figs, 
+    world=False, 
+    pltrange=[[-drange+graph_center[0], drange+graph_center[0]], 
+              [-drange+graph_center[1], drange+graph_center[1]],
+              [-drange+graph_center[2], drange+graph_center[2]]],
+    ):
+    if type(figs) == dict: 
+        figs = [figs[i] for i in figs] 
+          
     if world == True:
         fig_data = Frame(color='gray').get_fig_data()
         for fig in figs:
@@ -144,18 +193,21 @@ def plot_all(figs, world=False, pltrange=[[-drange+graph_center[0], drange+graph
             ), 
             width=500,
             height=500,
-            margin=dict(l=10, r=10, t=10, b=10),
         )
     else:
         fig_data = []
         for fig in figs:
             fig_data.extend(fig.get_fig_data())
         FIG = go.Figure(data=fig_data)
+    FIG.update_layout(
+        margin=dict(l=10, r=10, t=10, b=10),
+    )
 
     FIG.show()
+    return FIG
 
 # cannot be capture by camera, I guess...
-class Point():
+class Point:
     def __init__(self, pts, color='black', size=2):
         fig_data = go.Scatter3d(
             x = [pts[0]], 
@@ -168,17 +220,19 @@ class Point():
         return self.fig_data
     
 # quite similar to Point class, but can store different point sets with different colors
-class PointCloud():
+class PointCloud:
     
     # data = [pts, "color"]
-    def __init__(self):
+    def __init__(self, size=2):
         self.pts_data = []
+        self.size = size
         
     def add_data(self, data):
         # default color is black
         if data:
             if len(data) <= 1:
                 data.append('black')
+            data[0] = data[0].reshape(-1, 3)
         self.pts_data.append(data) 
         
     def get_fig_data(self):
@@ -190,23 +244,67 @@ class PointCloud():
                     y = pts[:, 1],
                     z = pts[:, 2],
                     mode = 'markers',
-                    marker = dict(size = 2, color = color, opacity=1),
+                    marker = dict(size = self.size, color = color, opacity=1),
                     showlegend = False))
         
         return fig_data
     
-class Camera():
+# show text in 3D space
+class Text:
 
-    def __init__(self, pose, center, name=None):
+    def __init__(self, pts, names, color='black'):
+        # INPUT
+        #  pts   : list of (3, ) arrays
+        #  names : list of strings
+        assert len(pts)==len(names)
+        self.pts = pts
+        self.names = names
+        self.color = color 
+        self.fig_data = []
+        for pt, name in zip(self.pts, self.names):
+            self.add_name(pt, name)
+
+    def add_name(self, pt, name):
+        fig_data = go.Scatter3d(x = [pt[0]], 
+                                y = [pt[1]], 
+                                z = [pt[2]],
+                                text = [name],
+                                mode = 'text', 
+                                marker = dict(size = 2, color = self.color, opacity=1), 
+                                showlegend = False)
+        self.fig_data.append(fig_data)
+    
+    def get_fig_data(self):
+        return self.fig_data
+    
+    # homogeneous to euclidean, 1d or 2d data
+def homo2eucl(data):
+    if len(data.shape) == 1:
+        return data[:-1] / data[-1]
+    else:
+        return data[:, :-1] / data[:, -1].reshape(-1, 1)
+
+# euclidean to homogeneous, 1d or 2d data
+def eucl2homo(data):
+    if len(data.shape) == 1:
+        return np.hstack([data, 1])
+    else:
+        return np.hstack([data, np.ones((data.shape[0], 1))])
+
+class Camera:
+
+    def __init__(self, pose, center, name=None, show_frame=True):
         self.pose = pose
         self.center = center
         self.focal_len = 1
         self.img_width = 4
         self.img_height = 2
         self.name = name
-
+        self.fig_data = []
+        
         # coordinate frame 
-        self.fig_data = Frame(self.pose, self.center).get_fig_data()
+        if show_frame:
+            self.fig_data.extend(Frame(self.pose, self.center).get_fig_data())
         # image plane 
         self.fig_data.extend(ImagePlane(self.pose, self.center, self.focal_len, self.img_width, self.img_height).get_fig_data())    
         # add name 
@@ -222,14 +320,16 @@ class Camera():
         # store the color of the points
         self.pts_color = None
 
-        # camera projection matrix
-        self.P = np.array([[self.focal_len, 0, 0, 0], 
-                           [0, self.focal_len, 0, 0],
-                           [0, 0, 1, 0]])
+        # camera pose matrix R (using the convention in Hartley's book)
+        self.R = self.pose.T
+
         # camera calibration matrix
         self.K = np.array([[self.focal_len, 0, self.img_width/2],
                            [0, self.focal_len, self.img_height/2],
                            [0, 0, 1]])
+        
+        # camera projection matrix
+        self.P = self.K @ self.R @ np.hstack([np.eye(3), -self.center[:, None]])
 
     def get_fig_data(self):
         return self.fig_data
@@ -249,25 +349,26 @@ class Camera():
         # remember the formula: X_camera = pose.T @ (X_world - center)
         camera_pts = (self.world_pts - self.center) @ self.pose
         self.camera_pts = camera_pts[camera_pts[:, -1] > self.focal_len] # remove points behind the camera
+        self.pts_color = self.pts_color[camera_pts[:, -1] > self.focal_len] # remove points (color) behind the camera
         
         # transform the data to the image coordinate frame
-        #data_homo = np.hstack((self.camera_data, np.ones((data.shape[0], 1))))
-        #self.image_data = data_homo @ self.P.T
-        
         image_pts = self.camera_pts @ self.K.T 
-        self.image_pts = image_pts / image_pts[:, -1][:, None]
+        self.image_pts = image_pts[:, :-1] / image_pts[:, -1][:, None]
+        #self.image_pts = homo2eucl(eucl2homo(self.world_pts) @ self.P.T)
         
     def show_image(self):
         # remove the point that is outside of the image plane 
         idx = (self.image_pts[:, 1] > 0) * (self.image_pts[:, 1] < self.img_height) * (self.image_pts[:, 0] < self.img_width) * (self.image_pts[:, 0] > 0)
-        image_pts = self.image_pts[idx]
-        camera_pts = self.camera_pts[idx]
-        
-        dist = np.linalg.norm(camera_pts - np.array([0, 0, self.focal_len]), axis = 1)
-        scaling = 5 / (dist - self.focal_len + 0.6)
-    
-        plt.figure()
-        plt.scatter(image_pts[:, 0], image_pts[:, 1], c=self.pts_color[idx], s=scaling)
+        if True in idx:
+            image_pts = self.image_pts[idx]
+            camera_pts = self.camera_pts[idx]
+            dist = np.linalg.norm(camera_pts - np.array([0, 0, self.focal_len]), axis = 1)
+            scaling = 5 * self.focal_len / dist
+            plt.figure()
+            plt.scatter(image_pts[:, 0], image_pts[:, 1], c=self.pts_color[idx], s=scaling)
+        else: 
+            plt.figure()
+            
         plt.xlim([0, self.img_width])
         plt.ylim([0, self.img_height])
         plt.gca().set_aspect('equal')
@@ -284,3 +385,95 @@ class Camera():
                                 marker = dict(size = 2, color = 'black', opacity=1), 
                                 showlegend = False)
         self.fig_data.append(fig_data)
+
+    
+def gram_schmidt(A):
+    # Gram-Schmidt only works for full rank matrix
+    # if not full rank, use numpy qr decomposition
+    if np.linalg.matrix_rank(A) < A.shape[1]:
+        print("call numpy qr")
+        Q, _ = np.linalg.qr(A)
+        return Q
+    Q = []
+    for i in range(A.shape[1]):
+        u = A[:, i]
+        for q in Q:
+            u = u - (q @ A[:, i]) * q / (q @ q)
+        Q.append(u / np.linalg.norm(u))
+    return np.array(Q).T
+
+def qr(A):
+    Q = gram_schmidt(A)
+    R = Q.T @ A 
+    return Q, R 
+
+def rq(A):
+    Q = gram_schmidt(A.T[:, ::-1])[:, ::-1].T
+    R = A @ Q.T
+    return R, Q
+
+# plot a point(2D) on a camera image plane(3D)
+class CameraPoint(Point):
+
+    def __init__(self, pts, camera, color='black', size=2):
+        self.R = camera.R
+        self.center = camera.center
+        self.K = camera.K
+        world_pts = self.img2world(pts)
+        super().__init__(world_pts, color, size)
+
+        self.data = world_pts
+
+    # transform image points to world coordinates
+    # (transformed points on image plane in 3D world, not 3D reconstruction)
+    def img2world(self, x):
+        xcam = np.linalg.inv(self.K) @ eucl2homo(x) # image frame to camera frame
+        xworld = xcam @ self.R + self.center # R^T*xcam + C
+        return xworld
+    
+    def get_fig_data(self):
+        return super().get_fig_data()
+    
+class CameraLine(Line):
+    
+    def __init__(self, l, camera, color='black', opacity=1):
+        # save the camera information
+        self.R = camera.R
+        self.center = camera.center 
+        self.K = camera.K
+        ximg1, ximg2 = self.find_two_img_pts(l)
+        
+        start = self.img2world(ximg1)
+        end = self.img2world(ximg2)
+        super().__init__(start, end, color, opacity)
+
+    # transform image points to world coordinates
+    # (transformed points on image plane in 3D world, not 3D reconstruction)
+    def img2world(self, x):
+        xcam =  eucl2homo(x) @ np.linalg.inv(self.K).T # image frame to camera frame
+        xworld = xcam @ self.R + self.center # R^T*xcam + C
+        return xworld
+    
+    # find image points that l^T x = 0
+    def find_two_img_pts(self, l):
+        # let the two points be [x, 0, 1] and [0, y, 1]
+        ximg1 = np.array([-l[2]/l[0], 0])
+        ximg2 = np.array([0, -l[2]/l[1]])
+        line_equation(ximg1, ximg2)
+        return ximg1, ximg2
+    
+    def get_fig_data(self):
+        return super().get_fig_data()
+    
+def vec2skew(x):
+    return np.array([
+        [0, -x[2], x[1]],
+        [x[2], 0, -x[0]],
+        [-x[1], x[0], 0]
+    ])
+
+# given two 2D points, print the line equation
+def line_equation(pt1, pt2):
+    m = (pt2[1] - pt1[1]) / (pt2[0] - pt1[0])
+    k = (pt1[1] * pt2[0] - pt2[1] * pt1[0]) / (pt2[0] - pt1[0])
+    print(f'line equation : {m:.2f}x + {k:.2f} = y')

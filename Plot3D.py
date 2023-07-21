@@ -1,30 +1,28 @@
+"""
+A Python library, inspired by Wolfram Mathematica, that facilitates the 
+plotting of objects in 3D space, particularly useful for implementing 
+camera models and epipolar geometry.
+"""
 import numpy as np 
 import matplotlib.pyplot as plt 
 import plotly.graph_objects as go
 
-# rotation matrix
-Rx = lambda theta: np.array([
-    [1, 0, 0],
-    [0, np.cos(theta), -np.sin(theta)],
-    [0, np.sin(theta), np.cos(theta)]])
-Ry = lambda theta: np.array([
-    [np.cos(theta), 0, np.sin(theta)],
-    [0, 1, 0],
-    [-np.sin(theta), 0, np.cos(theta)]])
-Rz = lambda theta: np.array([
-    [np.cos(theta), -np.sin(theta), 0], 
-    [np.sin(theta), np.cos(theta), 0],
-    [0, 0, 1]])
 
-# skew symmetric matrix for cross product
-skew = lambda v: np.array([
-    [0, -v[2], v[1]],
-    [v[2], 0, -v[0]],
-    [-v[1], v[0], 0]])    
+# ========================================================
+# 3D objects
+# ========================================================
+class FIG:
 
-class Arrow:
+    def __init__(self):
+        self.fig_data = []
+
+    def get_fig_data(self):
+        return self.fig_data
+
+class Arrow(FIG):
 
     def __init__(self, start, end, color='black', name=None):
+        super().__init__()
         start = start.flatten()
         end = end.flatten()
         head_scale = 0.3 # adjusts the cone size scaling 
@@ -55,12 +53,10 @@ class Arrow:
                             textfont = dict(color=color))
         self.fig_data = [body, head, text]
 
-    def get_fig_data(self):
-        return self.fig_data
-
-class Frame:
+class Frame(FIG):
     
     def __init__(self, pose=np.eye(3), center=np.zeros(3), color='black'):
+        super().__init__()
         # original center and pose 
         x_axis = np.array([1, 0, 0])
         y_axis = np.array([0, 1, 0])
@@ -77,14 +73,12 @@ class Frame:
         fig_data.extend(Arrow(o, o + y_axis, color=color, name='y').get_fig_data())
         fig_data.extend(Arrow(o, o + z_axis, color=color, name='z').get_fig_data())
         self.fig_data = fig_data
-    
-    def get_fig_data(self):
-        return self.fig_data
 
 # Line segment
-class Segment:
+class Segment(FIG):
 
     def __init__(self, start, end, color='black', opacity=1):
+        super().__init__()
         start, end = self.input_broadcast(start, end)
         fig_data = []
         for _start, _end in zip(start, end):
@@ -107,9 +101,6 @@ class Segment:
         new_b = np.repeat(b, Na, axis=0)
         new_b = new_b.reshape(Nb, Na, 3).transpose(1, 0, 2).reshape(-1, 3)
         return new_a, new_b
-
-    def get_fig_data(self):
-        return self.fig_data
     
 # plot "infinitely" lone line
 class Line(Segment):
@@ -127,13 +118,11 @@ class Line(Segment):
         end = end + coef * start2end
         super().__init__(start, end, color, opacity)
 
-    def get_fig_data(self):
-        return super().get_fig_data()
-
 # include image plane and the 4 lines from focal point to the 4 corners of the image plane
-class ImagePlane:
+class ImagePlane(FIG):
 
     def __init__(self, pose, center, focal_len, img_width, img_height, color='black'):
+        super().__init__()
         x_axis = np.array([1, 0, 0])
         y_axis = np.array([0, 1, 0])
         z_axis = np.array([0, 0, 1])
@@ -163,61 +152,16 @@ class ImagePlane:
 
         self.fig_data = data
 
-    def get_fig_data(self):
-        return self.fig_data
-
-drange = 4 # set the plot size
-graph_center = np.array([2, 0, 1])
-def plot_all(
-    figs, 
-    world=False, 
-    pltrange=[[-drange+graph_center[0], drange+graph_center[0]], 
-              [-drange+graph_center[1], drange+graph_center[1]],
-              [-drange+graph_center[2], drange+graph_center[2]]],
-    ):
-    if type(figs) == dict: 
-        figs = [figs[i] for i in figs] 
-          
-    if world == True:
-        fig_data = Frame(color='gray').get_fig_data()
-        for fig in figs:
-            fig_data.extend(fig.get_fig_data())
-        FIG = go.Figure(data=fig_data)
-        FIG.update_layout(
-            scene = dict(
-                xaxis = dict(nticks = 4, range = pltrange[0]),
-                yaxis = dict(nticks = 4, range = pltrange[1]),
-                zaxis = dict(nticks = 4, range = pltrange[2]),
-                # set aspectratio to 1:1:1
-                aspectratio = dict(x = 1, y = 1, z = 1)
-            ), 
-            width=500,
-            height=500,
-        )
-    else:
-        fig_data = []
-        for fig in figs:
-            fig_data.extend(fig.get_fig_data())
-        FIG = go.Figure(data=fig_data)
-    FIG.update_layout(
-        margin=dict(l=10, r=10, t=10, b=10),
-    )
-
-    FIG.show()
-    return FIG
-
 # cannot be capture by camera, I guess...
-class Point:
+class Point(FIG):
     def __init__(self, pts, color='black', size=2):
+        super().__init__()
         fig_data = go.Scatter3d(
             x = [pts[0]], 
             y = [pts[1]], 
             z = [pts[2]], 
             mode = "markers", marker = dict(color=color, size=size), showlegend = False)
         self.fig_data = [fig_data]
-
-    def get_fig_data(self):
-        return self.fig_data
     
 # quite similar to Point class, but can store different point sets with different colors
 class PointCloud:
@@ -250,13 +194,14 @@ class PointCloud:
         return fig_data
     
 # show text in 3D space
-class Text:
+class Text(FIG):
 
     def __init__(self, pts, names, color='black'):
         # INPUT
         #  pts   : list of (3, ) arrays
         #  names : list of strings
         assert len(pts)==len(names)
+        super().__init__()
         self.pts = pts
         self.names = names
         self.color = color 
@@ -273,23 +218,6 @@ class Text:
                                 marker = dict(size = 2, color = self.color, opacity=1), 
                                 showlegend = False)
         self.fig_data.append(fig_data)
-    
-    def get_fig_data(self):
-        return self.fig_data
-    
-    # homogeneous to euclidean, 1d or 2d data
-def homo2eucl(data):
-    if len(data.shape) == 1:
-        return data[:-1] / data[-1]
-    else:
-        return data[:, :-1] / data[:, -1].reshape(-1, 1)
-
-# euclidean to homogeneous, 1d or 2d data
-def eucl2homo(data):
-    if len(data.shape) == 1:
-        return np.hstack([data, 1])
-    else:
-        return np.hstack([data, np.ones((data.shape[0], 1))])
 
 class Camera:
 
@@ -386,32 +314,6 @@ class Camera:
                                 showlegend = False)
         self.fig_data.append(fig_data)
 
-    
-def gram_schmidt(A):
-    # Gram-Schmidt only works for full rank matrix
-    # if not full rank, use numpy qr decomposition
-    if np.linalg.matrix_rank(A) < A.shape[1]:
-        print("call numpy qr")
-        Q, _ = np.linalg.qr(A)
-        return Q
-    Q = []
-    for i in range(A.shape[1]):
-        u = A[:, i]
-        for q in Q:
-            u = u - (q @ A[:, i]) * q / (q @ q)
-        Q.append(u / np.linalg.norm(u))
-    return np.array(Q).T
-
-def qr(A):
-    Q = gram_schmidt(A)
-    R = Q.T @ A 
-    return Q, R 
-
-def rq(A):
-    Q = gram_schmidt(A.T[:, ::-1])[:, ::-1].T
-    R = A @ Q.T
-    return R, Q
-
 # plot a point(2D) on a camera image plane(3D)
 class CameraPoint(Point):
 
@@ -425,7 +327,7 @@ class CameraPoint(Point):
         self.data = world_pts
 
     # transform image points to world coordinates
-    # (transformed points on image plane in 3D world, not 3D reconstruction)
+    # (transformed points are on the image plane in 3D world, not 3D reconstruction)
     def img2world(self, x):
         xcam = np.linalg.inv(self.K) @ eucl2homo(x) # image frame to camera frame
         xworld = xcam @ self.R + self.center # R^T*xcam + C
@@ -448,32 +350,95 @@ class CameraLine(Line):
         super().__init__(start, end, color, opacity)
 
     # transform image points to world coordinates
-    # (transformed points on image plane in 3D world, not 3D reconstruction)
+    # (transformed points are on the image plane in 3D world, not 3D reconstruction)
     def img2world(self, x):
         xcam =  eucl2homo(x) @ np.linalg.inv(self.K).T # image frame to camera frame
         xworld = xcam @ self.R + self.center # R^T*xcam + C
         return xworld
     
-    # find image points that l^T x = 0
+    # find two image points that l^T x = 0
     def find_two_img_pts(self, l):
         # let the two points be [x, 0, 1] and [0, y, 1]
         ximg1 = np.array([-l[2]/l[0], 0])
         ximg2 = np.array([0, -l[2]/l[1]])
-        line_equation(ximg1, ximg2)
         return ximg1, ximg2
     
     def get_fig_data(self):
         return super().get_fig_data()
-    
-def vec2skew(x):
-    return np.array([
-        [0, -x[2], x[1]],
-        [x[2], 0, -x[0]],
-        [-x[1], x[0], 0]
-    ])
 
-# given two 2D points, print the line equation
-def line_equation(pt1, pt2):
-    m = (pt2[1] - pt1[1]) / (pt2[0] - pt1[0])
-    k = (pt1[1] * pt2[0] - pt2[1] * pt1[0]) / (pt2[0] - pt1[0])
-    print(f'line equation : {m:.2f}x + {k:.2f} = y')
+drange = 4 # set the plot size
+graph_center = np.array([2, 0, 1])
+def Show(
+    figs, 
+    world=False, 
+    pltrange=[[-drange+graph_center[0], drange+graph_center[0]], 
+              [-drange+graph_center[1], drange+graph_center[1]],
+              [-drange+graph_center[2], drange+graph_center[2]]],
+    ):
+    if type(figs) == dict: 
+        figs = [figs[i] for i in figs] 
+          
+    if world == True:
+        fig_data = Frame(color='gray').get_fig_data()
+        for fig in figs:
+            fig_data.extend(fig.get_fig_data())
+        FIG = go.Figure(data=fig_data)
+        FIG.update_layout(
+            scene = dict(
+                xaxis = dict(nticks = 4, range = pltrange[0]),
+                yaxis = dict(nticks = 4, range = pltrange[1]),
+                zaxis = dict(nticks = 4, range = pltrange[2]),
+                # set aspectratio to 1:1:1
+                aspectratio = dict(x = 1, y = 1, z = 1)
+            ), 
+            width=500,
+            height=500,
+        )
+    else:
+        fig_data = []
+        for fig in figs:
+            fig_data.extend(fig.get_fig_data())
+        FIG = go.Figure(data=fig_data)
+    FIG.update_layout(
+        margin=dict(l=10, r=10, t=10, b=10),
+    )
+
+    FIG.show()
+    return FIG
+
+# ========================================================
+# some useful functions
+# ========================================================
+# rotation matrix
+Rx = lambda theta: np.array([
+    [1, 0, 0],
+    [0, np.cos(theta), -np.sin(theta)],
+    [0, np.sin(theta), np.cos(theta)]])
+Ry = lambda theta: np.array([
+    [np.cos(theta), 0, np.sin(theta)],
+    [0, 1, 0],
+    [-np.sin(theta), 0, np.cos(theta)]])
+Rz = lambda theta: np.array([
+    [np.cos(theta), -np.sin(theta), 0], 
+    [np.sin(theta), np.cos(theta), 0],
+    [0, 0, 1]])
+
+# skew symmetric matrix for cross product
+skew = lambda v: np.array([
+    [0, -v[2], v[1]],
+    [v[2], 0, -v[0]],
+    [-v[1], v[0], 0]])    
+
+# homogeneous to euclidean, 1d or 2d data
+def homo2eucl(data):
+    if len(data.shape) == 1:
+        return data[:-1] / data[-1]
+    else:
+        return data[:, :-1] / data[:, -1].reshape(-1, 1)
+
+# euclidean to homogeneous, 1d or 2d data
+def eucl2homo(data):
+    if len(data.shape) == 1:
+        return np.hstack([data, 1])
+    else:
+        return np.hstack([data, np.ones((data.shape[0], 1))])

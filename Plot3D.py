@@ -7,11 +7,10 @@ import numpy as np
 import matplotlib.pyplot as plt 
 import plotly.graph_objects as go
 
-
 # ========================================================
 # 3D objects
 # ========================================================
-class FIG:
+class Figure:
 
     def __init__(self):
         self.fig_data = []
@@ -19,7 +18,7 @@ class FIG:
     def get_fig_data(self):
         return self.fig_data
 
-class Arrow(FIG):
+class Arrow(Figure):
 
     def __init__(self, start, end, color='black', name=None):
         super().__init__()
@@ -53,7 +52,7 @@ class Arrow(FIG):
                             textfont = dict(color=color))
         self.fig_data = [body, head, text]
 
-class Frame(FIG):
+class Frame(Figure):
     
     def __init__(self, pose=np.eye(3), center=np.zeros(3), color='black'):
         super().__init__()
@@ -75,7 +74,7 @@ class Frame(FIG):
         self.fig_data = fig_data
 
 # Line segment
-class Segment(FIG):
+class Segment(Figure):
 
     def __init__(self, start, end, color='black', opacity=1):
         super().__init__()
@@ -119,7 +118,7 @@ class Line(Segment):
         super().__init__(start, end, color, opacity)
 
 # include image plane and the 4 lines from focal point to the 4 corners of the image plane
-class ImagePlane(FIG):
+class ImagePlane(Figure):
 
     def __init__(self, pose, center, focal_len, img_width, img_height, color='black'):
         super().__init__()
@@ -153,7 +152,7 @@ class ImagePlane(FIG):
         self.fig_data = data
 
 # cannot be capture by camera, I guess...
-class Point(FIG):
+class Point(Figure):
     def __init__(self, pts, color='black', size=2):
         super().__init__()
         fig_data = go.Scatter3d(
@@ -194,7 +193,7 @@ class PointCloud:
         return fig_data
     
 # show text in 3D space
-class Text(FIG):
+class Text(Figure):
 
     def __init__(self, pts, names, color='black'):
         # INPUT
@@ -323,7 +322,6 @@ class CameraPoint(Point):
         self.K = camera.K
         world_pts = self.img2world(pts)
         super().__init__(world_pts, color, size)
-
         self.data = world_pts
 
     # transform image points to world coordinates
@@ -332,9 +330,6 @@ class CameraPoint(Point):
         xcam = np.linalg.inv(self.K) @ eucl2homo(x) # image frame to camera frame
         xworld = xcam @ self.R + self.center # R^T*xcam + C
         return xworld
-    
-    def get_fig_data(self):
-        return super().get_fig_data()
     
 class CameraLine(Line):
     
@@ -362,18 +357,15 @@ class CameraLine(Line):
         ximg1 = np.array([-l[2]/l[0], 0])
         ximg2 = np.array([0, -l[2]/l[1]])
         return ximg1, ximg2
-    
-    def get_fig_data(self):
-        return super().get_fig_data()
 
-drange = 4 # set the plot size
-graph_center = np.array([2, 0, 1])
+_drange = 4 # set the plot size
+_graph_center = np.array([2, 0, 1])
 def Show(
     figs, 
     world=False, 
-    pltrange=[[-drange+graph_center[0], drange+graph_center[0]], 
-              [-drange+graph_center[1], drange+graph_center[1]],
-              [-drange+graph_center[2], drange+graph_center[2]]],
+    pltrange=[[-_drange+_graph_center[0], _drange+_graph_center[0]], 
+              [-_drange+_graph_center[1], _drange+_graph_center[1]],
+              [-_drange+_graph_center[2], _drange+_graph_center[2]]],
     ):
     if type(figs) == dict: 
         figs = [figs[i] for i in figs] 

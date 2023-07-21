@@ -1,8 +1,3 @@
-"""
-A Python library, inspired by Wolfram Mathematica, that facilitates the 
-plotting of objects in 3D space, particularly useful for implementing 
-camera models and epipolar geometry.
-"""
 import numpy as np 
 import matplotlib.pyplot as plt 
 import plotly.graph_objects as go

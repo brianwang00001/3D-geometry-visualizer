@@ -1,0 +1,10 @@
+name: Plot3D
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.10
+  - numpy>=1.23
+  - matplotlib=3.5
+  - jupyterlab=3.4
+  - plotly=5.15
